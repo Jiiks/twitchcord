@@ -7,5 +7,11 @@
             <loadurl>v1.5.0</loadurl>
             <ext>app.asar</ext>
         </version>
+		<version>
+			<v>1.4.0</v>
+			<compatibility>deprecated</compatibility>
+			<loadurl>v1.4.0</loadurl>
+			<ext>app.asar</ext>
+		</version>
     </versions>
 </plugin>
