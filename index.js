@@ -29,7 +29,7 @@
 	
 	mainWindow.webContents.on('did-finish-load', function() {
 		
-		/* TwitchEmotes 'plugin' v1.2 by Jiiks
+		/* TwitchEmotes 'plugin' v1.3 by Jiiks
 		 * https://github.com/Jiiks | http://jiiks.net
 		 */
 		
