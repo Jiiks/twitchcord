@@ -5,7 +5,7 @@ function execJs(js) {
 
 mainWindow.webContents.on('did-finish-load', function() {
 		
-		/* TwitchEmotes 'plugin' v1.0 by Jiiks
+		/* TwitchEmotes 'plugin' v1.1 by Jiiks
 		 * https://github.com/Jiiks | http://jiiks.net
 		 */
 		
@@ -25,8 +25,8 @@ mainWindow.webContents.on('did-finish-load', function() {
 		execJs('function getNodes(node) { var next; var nodes = []; var walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT, null, false); while(next = walker.nextNode()) { nodes.push(next) } return nodes; }');
 		
 		//Injector
-		execJs('function inject(node) { for(var e in emotes.emotes) { if(node.parentElement != null) { node.parentElement.innerHTML = node.parentElement.innerHTML.replace(e, "<img src=https://static-cdn.jtvnw.net/emoticons/v1/" + emotes.emotes[e].image_id + "/1.0></img>"); } } }');
-
+		execJs('function inject(node) { for(var e in emotes.emotes) { if(node.parentElement != null) { var re = new RegExp(e, "g"); node.parentElement.innerHTML = node.parentElement.innerHTML.replace(re, "<img src=https://static-cdn.jtvnw.net/emoticons/v1/" + emotes.emotes[e].image_id + "/1.0></img>"); } } }');
+		
 		//Start mutator
 		execJs('observer.observe(document, {childList: true, subtree: true});');
 		
