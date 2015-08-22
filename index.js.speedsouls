@@ -1,0 +1,501 @@
+'use strict';
+
+var _interopRequireDefault = function (obj) { return obj && obj.__esModule ? obj : { 'default': obj }; };
+
+var _app = require('app');
+
+var _app2 = _interopRequireDefault(_app);
+
+var _BrowserWindow = require('browser-window');
+
+var _BrowserWindow2 = _interopRequireDefault(_BrowserWindow);
+
+var _CrashReporter = require('crash-reporter');
+
+var _CrashReporter2 = _interopRequireDefault(_CrashReporter);
+
+var _fs = require('fs');
+
+var _fs2 = _interopRequireDefault(_fs);
+
+var _ipc = require('ipc');
+
+var _ipc2 = _interopRequireDefault(_ipc);
+
+var _Menu = require('menu');
+
+var _Menu2 = _interopRequireDefault(_Menu);
+
+var _path = require('path');
+
+var _path2 = _interopRequireDefault(_path);
+
+var _shell = require('shell');
+
+var _shell2 = _interopRequireDefault(_shell);
+
+var _url = require('url');
+
+var _url2 = _interopRequireDefault(_url);
+
+var _AppSettings = require('./AppSettings');
+
+var _AppSettings2 = _interopRequireDefault(_AppSettings);
+
+var _ContextMenu = require('./ContextMenu');
+
+var _ContextMenu2 = _interopRequireDefault(_ContextMenu);
+
+var _NotificationWindow = require('./NotificationWindow');
+
+var _NotificationWindow2 = _interopRequireDefault(_NotificationWindow);
+
+var _SplashWindow = require('./SplashWindow.js');
+
+var _SplashWindow2 = _interopRequireDefault(_SplashWindow);
+
+var _SystemTray = require('./SystemTray');
+
+var _SystemTray2 = _interopRequireDefault(_SystemTray);
+
+var _Utils = require('./Utils');
+
+var _Utils2 = _interopRequireDefault(_Utils);
+
+var _VoiceEngine = require('./VoiceEngine');
+
+var _VoiceEngine2 = _interopRequireDefault(_VoiceEngine);
+
+var _applicationMenu = require('./menu');
+
+var _applicationMenu2 = _interopRequireDefault(_applicationMenu);
+
+var _autoUpdater = require('./AutoUpdater');
+
+var _autoUpdater2 = _interopRequireDefault(_autoUpdater);
+
+var _singleInstance = require('./singleInstance');
+
+var _singleInstance2 = _interopRequireDefault(_singleInstance);
+
+var DEFAULT_WIDTH = 1280;
+var DEFAULT_HEIGHT = 720;
+var MIN_WIDTH = 64;
+var MIN_HEIGHT = 64;
+var MIN_VISIBLE_ON_SCREEN = 32;
+
+_CrashReporter2['default'].start({
+  productName: 'Discord',
+  companyName: 'Hammer & Chisel, Inc.',
+  submitUrl: 'http://45.33.95.252:1127/post',
+  autoSubmit: true,
+  ignoreSystemCrashHandler: false
+});
+
+// citron note: bai bai for now.
+//app.commandLine.appendSwitch('in-process-gpu');
+
+var mainWindow = null;
+var notificationWindow = null;
+var contextMenu = null;
+var systemTray = null;
+var appSettings = null;
+var splashWindow = null;
+var releaseChannel = '';
+var configPath = '';
+var config = {};
+var lastConfigStr = '';
+
+function getUserHome() {
+  return _app2['default'].getPath('userData');
+}
+
+function saveConfig() {
+  var configStr = JSON.stringify(config, null, 2);
+  if (lastConfigStr == configStr) {
+    return;
+  }
+  lastConfigStr = configStr;
+  _fs2['default'].writeFileSync(configPath, configStr);
+}
+
+function loadConfig() {
+  try {
+    var configStr = _fs2['default'].readFileSync(configPath);
+    config = JSON.parse(configStr);
+    lastConfigStr = configStr;
+  } catch (e) {
+    config = {};
+    saveConfig();
+  }
+}
+
+function saveWindowConfig(browserWindow) {
+  if (!browserWindow) {
+    return;
+  }
+
+  config.WINDOW_BOUNDS = browserWindow.getBounds();
+
+  saveConfig();
+}
+
+function AABBOverlaps(a, b) {
+  var ax1 = a.x + a.width;
+  var bx1 = b.x + b.width;
+  var ay1 = a.y + a.height;
+  var by1 = b.y + b.height;
+  // clamp a to b, see if it is non-empty
+  var cx0 = a.x < b.x ? b.x : a.x;
+  var cx1 = ax1 < bx1 ? ax1 : bx1;
+  if (cx1 - cx0 > 0) {
+    var cy0 = a.y < b.y ? b.y : a.y;
+    var cy1 = ay1 < by1 ? ay1 : by1;
+    if (cy1 - cy0 > 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function loadWindowConfig(mainWindowOptions) {
+  if (config.WINDOW_BOUNDS === undefined) {
+    mainWindowOptions.center = true;
+    return;
+  }
+
+  if (config.WINDOW_BOUNDS.width < MIN_WIDTH) {
+    config.WINDOW_BOUNDS.width = MIN_WIDTH;
+  }
+
+  if (config.WINDOW_BOUNDS.height < MIN_HEIGHT) {
+    config.WINDOW_BOUNDS.height = MIN_HEIGHT;
+  }
+
+  var isVisibleOnAnyScreen = false;
+  var screen = require('screen');
+  var displays = screen.getAllDisplays();
+  displays.forEach(function (display) {
+    if (isVisibleOnAnyScreen) {
+      return;
+    }
+    var displayBound = display.workArea;
+    displayBound.x += MIN_VISIBLE_ON_SCREEN;
+    displayBound.y += MIN_VISIBLE_ON_SCREEN;
+    displayBound.width -= 2 * MIN_VISIBLE_ON_SCREEN;
+    displayBound.height -= 2 * MIN_VISIBLE_ON_SCREEN;
+    isVisibleOnAnyScreen = AABBOverlaps(config.WINDOW_BOUNDS, displayBound);
+  });
+
+  if (isVisibleOnAnyScreen) {
+    mainWindowOptions.width = config.WINDOW_BOUNDS.width;
+    mainWindowOptions.height = config.WINDOW_BOUNDS.height;
+    mainWindowOptions.x = config.WINDOW_BOUNDS.x;
+    mainWindowOptions.y = config.WINDOW_BOUNDS.y;
+  } else {
+    mainWindowOptions.center = true;
+  }
+}
+
+function webContentsSend() {
+  for (var _len = arguments.length, args = Array(_len), _key = 0; _key < _len; _key++) {
+    args[_key] = arguments[_key];
+  }
+
+  if (mainWindow != null && mainWindow.webContents != null) {
+    var _mainWindow$webContents;
+
+    (_mainWindow$webContents = mainWindow.webContents).send.apply(_mainWindow$webContents, args);
+  }
+}
+
+function extractPath(args, fallbackPath) {
+  if (args[0] === '--url') {
+    var parsedURL = _url2['default'].parse(args[1]);
+    if (parsedURL.protocol === 'discord:') {
+      return parsedURL.path;
+    }
+  }
+  return fallbackPath;
+}
+
+function setWindowVisible(isVisible) {
+  if (mainWindow == null) {
+    return;
+  }
+
+  if (isVisible) {
+    mainWindow.show();
+  } else {
+    webContentsSend('MAIN_WINDOW_BLUR');
+    mainWindow.hide();
+    systemTray.displayHowToCloseHint();
+  }
+
+  mainWindow.setSkipTaskbar(!isVisible);
+}
+
+function main() {
+  if (process.platform === 'win32') {
+    var _require = require('./SquirrelUpdate');
+
+    var handleStartupEvent = _require.handleStartupEvent;
+
+    var squirrelCommand = process.argv[1];
+    if (handleStartupEvent('Discord', _app2['default'], squirrelCommand)) {
+      return;
+    }
+  }
+
+  releaseChannel = _singleInstance2['default'].releaseChannel;
+  configPath = _path2['default'].join(getUserHome(), 'discord_' + releaseChannel + '.json');
+  console.log('Using update channel \'' + releaseChannel + '\'');
+
+  loadConfig();
+
+  var API_ENDPOINT = config.API_ENDPOINT || 'https://discordapp.com/api';
+  var WEBAPP_ENDPOINT = config.WEBAPP_ENDPOINT || 'https://discordapp.com';
+  var AUTO_UPDATE = config.AUTO_UPDATE != null ? config.AUTO_UPDATE : true;
+
+  var appPath = extractPath(process.argv.slice(1), '/channels/@me');
+
+  if (_autoUpdater2['default'] != null) {
+    (function () {
+      var autoUpdaterState = 'UPDATE_NOT_AVAILABLE';
+      _autoUpdater2['default'].on('checking-for-update', function () {
+        autoUpdaterState = 'CHECKING_FOR_UPDATES';
+        webContentsSend(autoUpdaterState);
+      });
+      _autoUpdater2['default'].on('update-not-available', function () {
+        autoUpdaterState = 'UPDATE_NOT_AVAILABLE';
+        webContentsSend(autoUpdaterState);
+      });
+      _autoUpdater2['default'].on('update-available', function () {
+        autoUpdaterState = 'UPDATE_AVAILABLE';
+        webContentsSend(autoUpdaterState);
+      });
+      _autoUpdater2['default'].on('error', function (event, message) {
+        autoUpdaterState = 'UPDATE_NOT_AVAILABLE';
+        webContentsSend('UPDATE_ERROR', message);
+      });
+      _autoUpdater2['default'].on('update-downloaded', function (event, releaseNotes, releaseName, releaseDate, updateUrl) {
+        autoUpdaterState = 'UPDATE_DOWNLOADED';
+        webContentsSend(autoUpdaterState, releaseNotes, releaseName, releaseDate, updateUrl);
+      });
+
+      switch (process.platform) {
+        case 'darwin':
+          _autoUpdater2['default'].setFeedUrl('' + API_ENDPOINT + '/' + releaseChannel + '/updates?version=' + _app2['default'].getVersion());
+          break;
+        case 'win32':
+          // Squirrel for Windows can't handle query params
+          // https://github.com/Squirrel/Squirrel.Windows/issues/132
+          _autoUpdater2['default'].setFeedUrl('' + API_ENDPOINT + '/' + releaseChannel + '/updates');
+          break;
+      }
+
+      _ipc2['default'].on('CHECK_FOR_UPDATES', function (event, arg) {
+        if (autoUpdaterState === 'UPDATE_NOT_AVAILABLE') {
+          _autoUpdater2['default'].checkForUpdates();
+        } else {
+          webContentsSend(autoUpdaterState);
+        }
+      });
+      _ipc2['default'].on('QUIT_AND_INSTALL', function (event, arg) {
+        _autoUpdater2['default'].quitAndInstall();
+      });
+    })();
+  }
+
+  _app2['default'].on('open-url', function (event, openURL) {
+    var parsedURL = _url2['default'].parse(openURL);
+    if (parsedURL.protocol === 'discord:') {
+      if (mainWindow == null) {
+        appPath = parsedURL.path;
+      } else {
+        webContentsSend('PATH', parsedURL.path);
+      }
+    }
+  });
+
+  _app2['default'].on('menu:open-help', function () {
+    return webContentsSend('HELP_OPEN');
+  });
+  _app2['default'].on('menu:open-settings', function () {
+    return webContentsSend('USER_SETTINGS_OPEN');
+  });
+  _app2['default'].on('menu:check-for-updates', function () {
+    return _autoUpdater2['default'].checkForUpdates();
+  });
+
+  _app2['default'].on('before-quit', function (e) {
+    saveWindowConfig(mainWindow);
+    mainWindow = null;
+    contextMenu = null;
+    if (notificationWindow != null) {
+      notificationWindow.close();
+    }
+  });
+  
+  /*Simplify*/
+  function execJs(js) {
+	  mainWindow.webContents.executeJavaScript(js);
+  }
+
+  function launchMainAppWindow(isVisible) {
+    var mainWindowOptions = {
+      width: DEFAULT_WIDTH,
+      height: DEFAULT_HEIGHT,
+      'min-width': MIN_WIDTH,
+      'min-height': MIN_HEIGHT,
+      transparent: false,
+      frame: false,
+      resizable: true,
+      show: isVisible
+    };
+
+    loadWindowConfig(mainWindowOptions);
+
+    mainWindow = new _BrowserWindow2['default'](mainWindowOptions);
+    mainWindow.webContents.on('new-window', function (e, windowURL) {
+      e.preventDefault();
+      _shell2['default'].openExternal(windowURL);
+    });
+
+    mainWindow.loadUrl('' + WEBAPP_ENDPOINT + '' + appPath + '?_=' + Date.now());
+
+    contextMenu = new _ContextMenu2['default'](mainWindow);
+	
+	mainWindow.webContents.on('did-finish-load', function() {
+		
+		/* TwitchEmotes 'plugin' v1.1 by Jiiks with team speedsouls emotes: http://www.twitch.tv/team/speedsouls
+		 * https://github.com/Jiiks | http://jiiks.net
+		 */
+		
+		//Emotes array
+		execJs('var emotes = {"emotes": { "4Head":{ "image_id":354 }, "ANELE":{ "image_id":3792 },"ArgieB8":{"image_id":51838},"ArsonNoSexy":{"image_id":50},"AsianGlow":{"image_id":74},"AtGL":{"image_id":9809},"AthenaPMS":{"image_id":32035},"AtIvy":{"image_id":9800},"AtWW":{"image_id":9801},"BabyRage":{"image_id":22639},"BatChest":{"image_id":1905},"BCWarrior":{"image_id":30},"BibleThump":{"image_id":86},"BigBrother":{"image_id":1904},"BionicBunion":{"image_id":24},"BlargNaut":{"image_id":38},"BloodTrail":{"image_id":69},"BORT":{"image_id":243},"BrainSlug":{"image_id":881},"BrokeBack":{"image_id":4057},"BuddhaBar":{"image_id":27602},"CoolCat":{"image_id":58127},"CorgiDerp":{"image_id":49106},"CougarHunt":{"image_id":21},"DAESuppy":{"image_id":973},"DansGame":{"image_id":33},"DatHass":{"image_id":20225},"DatSheffy":{"image_id":170},"DBstyle":{"image_id":73},"deExcite":{"image_id":46249},"deIlluminati":{"image_id":46248},"DendiFace":{"image_id":58135},"DogFace":{"image_id":1903},"DOOMGuy":{"image_id":54089},"EagleEye":{"image_id":20},"EleGiggle":{"image_id":4339},"EvilFetus":{"image_id":72},"FailFish":{"image_id":360},"FPSMarksman":{"image_id":42},"FrankerZ":{"image_id":65},"FreakinStinkin":{"image_id":39},"FUNgineer":{"image_id":244},"FunRun":{"image_id":48},"FuzzyOtterOO":{"image_id":168},"GasJoker":{"image_id":9802},"GingerPower":{"image_id":32},"GrammarKing":{"image_id":3632},"HassanChop":{"image_id":68},"HeyGuys":{"image_id":30259},"HotPokket":{"image_id":357},"HumbleLife":{"image_id":46881},"ItsBoshyTime":{"image_id":169},"Jebaited":{"image_id":90},"JKanStyle":{"image_id":15},"JonCarnage":{"image_id":26},"KAPOW":{"image_id":9803},"Kappa":{"image_id":25},"KappaPride":{"image_id":55338},"Keepo":{"image_id":1902},"KevinTurtle":{"image_id":40},"Kippa":{"image_id":1901},"Kreygasm":{"image_id":41},"KZskull":{"image_id":5253},"Mau5":{"image_id":30134},"mcaT":{"image_id":35063},"MechaSupes":{"image_id":9804},"MrDestructoid":{"image_id":28},"MVGame":{"image_id":29},"NightBat":{"image_id":9805},"NinjaTroll":{"image_id":45},"NoNoSpot":{"image_id":44},"NotATK":{"image_id":34875},"NotLikeThis":{"image_id":58765},"OMGScoots":{"image_id":91},"OneHand":{"image_id":66},"OpieOP":{"image_id":356},"OptimizePrime":{"image_id":16},"OSbeaver":{"image_id":47005},"OSbury":{"image_id":47420},"OSdeo":{"image_id":47007},"OSfrog":{"image_id":47008},"OSkomodo":{"image_id":47010},"OSrob":{"image_id":47302},"OSsloth":{"image_id":47011},"panicBasket":{"image_id":22998},"PanicVis":{"image_id":3668},"PazPazowitz":{"image_id":19},"PeoplesChamp":{"image_id":3412},"PermaSmug":{"image_id":27509},"PicoMause":{"image_id":27},"PipeHype":{"image_id":4240},"PJHarley":{"image_id":9808},"PJSalt":{"image_id":36},"PMSTwin":{"image_id":92},"PogChamp":{"image_id":88},"Poooound":{"image_id":358},"PraiseIt":{"image_id":38586},"PRChase":{"image_id":28328},"PunchTrees":{"image_id":47},"PuppeyFace":{"image_id":58136},"RaccAttack":{"image_id":27679},"RalpherZ":{"image_id":1900},"RedCoat":{"image_id":22},"ResidentSleeper":{"image_id":245},"RitzMitz":{"image_id":4338},"RuleFive":{"image_id":361},"ShadyLulu":{"image_id":52492},"Shazam":{"image_id":9807},"shazamicon":{"image_id":9806},"ShazBotstix":{"image_id":87},"ShibeZ":{"image_id":27903},"SMOrc":{"image_id":52},"SMSkull":{"image_id":51},"SoBayed":{"image_id":1906},"SoonerLater":{"image_id":355},"SriHead":{"image_id":14706},"SSSsss":{"image_id":46},"StoneLightning":{"image_id":17},"StrawBeary":{"image_id":37},"SuperVinlin":{"image_id":31},"SwiftRage":{"image_id":34},"tbBaconBiscuit":{"image_id":44499},"tbChickenBiscuit":{"image_id":56879},"tbQuesarito":{"image_id":56883},"tbSausageBiscuit":{"image_id":56881},"tbSpicy":{"image_id":56882},"tbSriracha":{"image_id":56880},"TF2John":{"image_id":1899},"TheKing":{"image_id":50901},"TheRinger":{"image_id":18},"TheTarFu":{"image_id":70},"TheThing":{"image_id":7427},"ThunBeast":{"image_id":1898},"TinyFace":{"image_id":67},"TooSpicy":{"image_id":359},"TriHard":{"image_id":171},"TTours":{"image_id":38436},"UleetBackup":{"image_id":49},"UncleNox":{"image_id":3666},"UnSane":{"image_id":71},"VaultBoy":{"image_id":54090},"Volcania":{"image_id":166},"WholeWheat":{"image_id":1896},"WinWaker":{"image_id":167},"WTRuck":{"image_id":1897},"WutFace":{"image_id":28087},"YouWHY":{"image_id":4337}} }');
+
+		//Sub emotes
+		execJs('var hantzbro = { "hantzLmao":{"image_id":33567},"hantzLewd":{"image_id":33172},"hantzCookie":{"image_id":35960},"hantzSun":{"image_id":36588},"hantzKetchup":{"image_id":32747} }; ' + 
+			   'var kahmul78 = { "mulThump":{"image_id":52960},"mulMule":{"image_id":52959},"mulDoge":{"image_id":52836},"mulWorm":{"image_id":55756},"mulLove":{"image_id":55695},"mulGold":{"image_id":53540} }; ' + 
+			   'var noobest = { "bestBear":{"image_id":3249}, "bestDangerDog":{"image_id":3318}, "bestDogeloid":{"image_id":3372}, "bestPeach":{"image_id":3963}, "bestNice":{"image_id":10577}, "bestSun":{"image_id":29883} }; ' + 
+			   'var mrtakahashi = { "mrtakaMeh":{"image_id":44026}, "mrtakaSun":{"image_id":29897}, "mrtakaGold":{"image_id":29128}, "mrtakaNyah":{"image_id":44528} }; ' + 
+			   'var z0mb13l4ur4 = { "zooDarkBear":{"image_id":46983}, "zooSloth":{"image_id":47130}, "zooBat":{"image_id":45075}, "zooRIP":{"image_id":47855}, "zooZappa":{"image_id":47343}, "zooSeal":{"image_id":48273} }; ' + 
+			   'var distortion2 = { "distHype":{"image_id":23777},"distLove":{"image_id":23776},"distRage":{"image_id":23807},"distPls":{"image_id":24041},"distDog":{"image_id":52564} }; ' + 
+			   'var qttsix = { "qttChihaya":{"image_id":13765},"qttMiki":{"image_id":13770},"qttIori":{"image_id":19375},"qttYayoi":{"image_id":19194},"qttHibiki":{"image_id":21894},"qttTakane":{"image_id":21893},"qttMakoto":{"image_id":37755},"qttHaruka":{"image_id":37754} }; ' + 
+			   'var meczeoro = { "mecSkull":{"image_id":14259},"mecBeard":{"image_id":15181},"mecHype":{"image_id":16109},"mecWR":{"image_id":16111} }; ' + 
+			   'var santzo84 = { "santzoGamePls":{"image_id":1893},"santzoUrn":{"image_id":2317},"santzoShovel":{"image_id":2318},"santzoOMG":{"image_id":3553},"santzoPuju":{"image_id":3964},"santzoLifts":{"image_id":4395},"santzoSantoz":{"image_id":5975},"santzoBabyJ":{"image_id":11424} };' +
+			   'var subemotes = [hantzbro, kahmul78, noobest, mrtakahashi, z0mb13l4ur4, distortion2, qttsix, meczeoro, santzo84]');
+			   
+		//Add sub emotes 
+		execJs('for(var se in subemotes) { for(var e in subemotes[se]) { emotes.emotes[e] = {"image_id":subemotes[se][e].image_id} } }');
+
+		//Create mutation observer
+		execJs('var observer = new MutationObserver(function (mutations) { mutationCallback(mutations); })');
+		
+		//Mutation callback
+		execJs('function mutationCallback(mutations) { mutations.forEach(function (mutation) { for(var i = 0 ; i < mutation.addedNodes.length ; ++i) { var next = mutation.addedNodes.item(i); processNode(next) } }) }');
+
+		//Checks
+		execJs('function processNode(node) { if(node) { var nodes = getNodes(node); for(var n in nodes) { inject(nodes[n]) } } }');
+		
+		//Node finder
+		execJs('function getNodes(node) { var next; var nodes = []; var walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT, null, false); while(next = walker.nextNode()) { nodes.push(next) } return nodes; }');
+		
+		//Injector
+		execJs('function inject(node) { for(var e in emotes.emotes) { if(node.parentElement != null) { var re = new RegExp(e, "g"); node.parentElement.innerHTML = node.parentElement.innerHTML.replace(re, "<img src=https://static-cdn.jtvnw.net/emoticons/v1/" + emotes.emotes[e].image_id + "/1.0></img>"); } } }');
+		
+		//Start mutator
+		execJs('observer.observe(document, {childList: true, subtree: true});');
+		
+	});
+	
+	
+
+    if (process.platform === 'win32') {
+      notificationWindow = new _NotificationWindow2['default'](mainWindow, {
+        title: 'Discord Notifications',
+        maxVisible: 5,
+        screenPosition: 'bottom'
+      });
+
+      notificationWindow.on('notification-click', function () {
+        setWindowVisible(true);
+      });
+
+      appSettings = new _AppSettings2['default']();
+
+      systemTray = new _SystemTray2['default'](function () {
+        return _autoUpdater2['default'].checkForUpdates();
+      }, function () {
+        return _app2['default'].quit();
+      }, function () {
+        return setWindowVisible(true);
+      }, appSettings);
+
+      mainWindow.on('close', function (e) {
+        if (mainWindow === null) {
+          // this means we're quitting
+          return;
+        }
+        _Utils2['default'].setFocused(false);
+        setWindowVisible(false);
+        e.preventDefault();
+      });
+    }
+
+    mainWindow.on('focus', function () {
+      _Utils2['default'].setFocused(true);
+    });
+
+    mainWindow.on('blur', function () {
+      _Utils2['default'].setFocused(false);
+      // invoking Utils.purgeMemory() purges in the main process, and
+      // webContentsSend() instructs the renderer processes to do the
+      // same
+      _Utils2['default'].purgeMemory();
+      webContentsSend('PURGE_MEMORY');
+      webContentsSend('MAIN_WINDOW_BLUR');
+    });
+
+    _Utils2['default'].setFocused(mainWindow.isFocused());
+  }
+
+  _app2['default'].on('ready', function () {
+    global.VoiceEngine = _VoiceEngine2['default'];
+
+    _Menu2['default'].setApplicationMenu(_applicationMenu2['default']);
+
+    _singleInstance2['default'].create(function () {
+      if (AUTO_UPDATE && _autoUpdater2['default'] != null) {
+        splashWindow = new _SplashWindow2['default']();
+        splashWindow.once(_SplashWindow2['default'].EVENT_APP_SHOULD_LAUNCH, function () {
+          return launchMainAppWindow(false);
+        });
+        splashWindow.once(_SplashWindow2['default'].EVENT_APP_SHOULD_SHOW, function () {
+          return setWindowVisible(true);
+        });
+      } else {
+        launchMainAppWindow(true);
+      }
+    }, function (args) {
+      if (args != null && args.length > 0 && args[0] === '--squirrel-uninstall') {
+        _app2['default'].quit();
+        return;
+      }
+
+      if (mainWindow != null) {
+        appPath = extractPath(args);
+        if (appPath != null) {
+          webContentsSend('PATH', appPath);
+        }
+        setWindowVisible(true);
+        mainWindow.focus();
+      } else if (splashWindow != null) {
+        splashWindow.focus();
+      }
+    });
+  });
+}
+
+main();
