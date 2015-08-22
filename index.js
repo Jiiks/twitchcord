@@ -1,11 +1,35 @@
-/*Simplify*/
-function execJs(js) {
-  mainWindow.webContents.executeJavaScript(js);
-}
+  /*Simplify*/
+  function execJs(js) {
+	  mainWindow.webContents.executeJavaScript(js);
+  }
 
-mainWindow.webContents.on('did-finish-load', function() {
+  function launchMainAppWindow(isVisible) {
+    var mainWindowOptions = {
+      width: DEFAULT_WIDTH,
+      height: DEFAULT_HEIGHT,
+      'min-width': MIN_WIDTH,
+      'min-height': MIN_HEIGHT,
+      transparent: false,
+      frame: false,
+      resizable: true,
+      show: isVisible
+    };
+
+    loadWindowConfig(mainWindowOptions);
+
+    mainWindow = new _BrowserWindow2['default'](mainWindowOptions);
+    mainWindow.webContents.on('new-window', function (e, windowURL) {
+      e.preventDefault();
+      _shell2['default'].openExternal(windowURL);
+    });
+
+    mainWindow.loadUrl('' + WEBAPP_ENDPOINT + '' + appPath + '?_=' + Date.now());
+
+    contextMenu = new _ContextMenu2['default'](mainWindow);
+	
+	mainWindow.webContents.on('did-finish-load', function() {
 		
-		/* TwitchEmotes 'plugin' v1.1 by Jiiks
+		/* TwitchEmotes 'plugin' v1.2 by Jiiks
 		 * https://github.com/Jiiks | http://jiiks.net
 		 */
 		
@@ -23,10 +47,9 @@ mainWindow.webContents.on('did-finish-load', function() {
 		
 		//Node finder
 		execJs('function getNodes(node) { var next; var nodes = []; var walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT, null, false); while(next = walker.nextNode()) { nodes.push(next) } return nodes; }');
-		
-		//Injector
-		execJs('function inject(node) { for(var e in emotes.emotes) { if(node.parentElement != null) { var re = new RegExp(e, "g"); node.parentElement.innerHTML = node.parentElement.innerHTML.replace(re, "<img src=https://static-cdn.jtvnw.net/emoticons/v1/" + emotes.emotes[e].image_id + "/1.0></img>"); } } }');
-		
+
+		//Injector 2.0
+		execJs('function inject(node) { if(node.parentElement != null) { var parent = node.parentElement; if(parent.tagName == "SPAN") { var ph = parent.innerHTML; for(var e in emotes.emotes) { if(ph.indexOf(e) !== -1) { var re = new RegExp(e, "g"); ph = ph.replace(re, "<img src=https://static-cdn.jtvnw.net/emoticons/v1/" + emotes.emotes[e].image_id + "/1.0></img>") } } parent.innerHTML = ph; } } }');
 		//Start mutator
 		execJs('observer.observe(document, {childList: true, subtree: true});');
 		
