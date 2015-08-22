@@ -1,7 +1,8 @@
 <plugin>
     <latestversion>1.5.0</latestversion>
     <versions>
-        <version id="1.5.0">
+        <version>
+			<v>1.5.0</v>
             <compatibility>0.0.27</compatibility>
             <loadurl>v1.5.0</loadurl>
             <ext>app.asar</ext>
