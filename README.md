@@ -10,5 +10,5 @@ or modify it yourself with index.js contents.
 1.4 adds all sub emotes(some might be missing let me know)
 
 ```
-latest version: v1.4
+Report any emote conflicts as an issue.
 ```
