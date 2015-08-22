@@ -1,13 +1,17 @@
 # twitchcord
 Twitch emote "plugin" for discord
 
-Replace the "app.asar" file in discord resources dir.
+Replace injex.js in app.asar with index.js here
+
+or
+
+download app.asar from https://github.com/Jiiks/twitchcord/releases and replace the app.asar file:
 
 Windows: AppData\Local\Discord\app-x.x.xxx\resources
 
 or modify it yourself with index.js contents.
 
-1.4 adds all sub emotes(some might be missing let me know)
+Now has all twitch emotes and sub emotes.
 
 ```
 Report any emote conflicts as an issue.
