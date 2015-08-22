@@ -16,3 +16,7 @@ Now has all twitch emotes and sub emotes.
 ```
 Report any emote conflicts as an issue.
 ```
+
+```
+Easy installer coming soon
+```
