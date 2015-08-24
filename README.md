@@ -1,11 +1,9 @@
-# twitchcord
-Twitch emote "plugin" for discord
+# TwitchCord
+TwitchCord is a Twitch.tv emote "plugin" for Discord https://discordapp.com/
 
-Replace injex.js in app.asar with index.js here
+Installation:
 
-or
-
-download app.asar from https://github.com/Jiiks/twitchcord/releases and replace the app.asar file:
+Download app.asar from https://github.com/Jiiks/twitchcord/releases and replace the app.asar file:
 
 Windows: AppData\Local\Discord\app-x.x.xxx\resources
 
