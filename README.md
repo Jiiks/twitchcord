@@ -13,6 +13,8 @@ Now has all twitch emotes and sub emotes.
 
 Supported FFZ emotes can be found here: https://github.com/Jiiks/twitchcord/wiki/FFZ-EmoteList
 
+![ss](http://puu.sh/jMyG8.png)
+
 ```
 Version 1.6 adds quick emote menu and 240 suggested FrankerFaceZ emotes http://frankerfacez.com/
 ```
