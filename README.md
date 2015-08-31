@@ -2,7 +2,8 @@
 TwitchCord is a Twitch.tv emote "plugin" for Discord https://discordapp.com/
 
 v1.6.1 Final
-TwitchCord will be a part of BetterDiscordApp https://github.com/Jiiks/BetterDiscordApp
+
+TwitchCord is now a part of BetterDiscordApp https://github.com/Jiiks/BetterDiscordApp
 
 Installation:
 
